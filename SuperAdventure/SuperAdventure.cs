@@ -64,41 +64,26 @@ namespace SuperAdventure
 
         private void btnUseWeapon_Click(object sender, EventArgs e)
         {
-
+            //add code here 
         }
 
         private void btnUsePotion_Click(object sender, EventArgs e)
         {
+            //add code here 
 
         }
 
         private void MoveTo(Location newLocation)
         {
             //Does the location have any required items?
-            if(newLocation.ItemRequiredToEnter != null)
-                {
-                    //see if the player has the required item in inventory
-                    bool playerHasRequiredItem = false; 
-
-                    foreach(InventoryItem ii in _player.Inventory)
-                    {
-                        if(ii.Details.ID == newLocation.ItemRequiredToEnter.ID)
-                        {
-                            //player has required item 
-                            playerHasRequiredItem = true;
-                            break; // Exit out of loop
-                        }
-                    }
-
-                    if(!playerHasRequiredItem)
-                    {
+            if(!_player.HasRequiredItemToEnterLocation(newLocation))
+            { 
                         //player does not have item in inventory, display message to player and stop moving
                         rtbMessages.Text += "You must have a " + 
                         newLocation.ItemRequiredToEnter.Name + 
                         " to enter this location." + Environment.NewLine;
                         return;
-                    }
-                }
+            }
 
             //update player's current location
             _player.CurrentLocation = newLocation;
@@ -123,22 +108,8 @@ namespace SuperAdventure
             if(newLocation.QuestAvailableHere != null)
             {
                 //does player have quest, and is it completed?
-                bool playerAlreadyHasQuest = false;
-                bool playerAlreadyCompletedQuest = false;
-
-                foreach(PlayerQuest pq in _player.Quests)
-                {
-                    if(pq.Details.ID == newLocation.QuestAvailableHere.ID)
-                    {
-                        playerAlreadyHasQuest = true;
-
-                        if(pq.IsCompleted)
-                        {
-                            playerAlreadyCompletedQuest = true;
-
-                        }
-                    }
-                }
+                bool playerAlreadyHasQuest = _player.HasThisQuest(newLocation.QuestAvailableHere);
+                bool playerAlreadyCompletedQuest = _player.CompletedThisQuest(newLocation.QuestAvailableHere);
 
                 //check if player already has quest 
                 if(playerAlreadyHasQuest)
@@ -147,45 +118,10 @@ namespace SuperAdventure
                     if(!playerAlreadyCompletedQuest)
                     {
                         //See if the player has all items needed to complete the quest
-                        bool playerHasAllItemsForQuest = true;
+                        bool playerHasAllItemsForQuest = 
+                            _player.HasAllQuestCompletionItems(newLocation.QuestAvailableHere);
 
-                        foreach(QuestCompletionItem qci in newLocation.QuestAvailableHere.QuestCompletionItems)
-                        {
-                            bool foundItemInPlayersInventory = false;
-
-                            //Check each item to see if they have it, and have enough of it
-                            foreach(InventoryItem ii in _player.Inventory)
-                            {
-                                //The player has this item in Inventory 
-                                if (ii.Details.ID == qci.Details.ID)
-                                {
-                                    foundItemInPlayersInventory = true;
-
-                                    if(ii.Quantity < qci.Quantity)
-                                    {
-                                        //Player does not have enough of this item 
-                                        playerHasAllItemsForQuest = false;
-
-                                        //No need to keep checking other items
-                                        break;
-                                    }
-
-                                    //we found the item, so don't check the remaining items
-                                    break;
-                                }
-                               
-                            }
-
-                            //if we didn't find the required item, set our variable and stop looking for other items
-                            if(!foundItemInPlayersInventory)
-                            {
-                                //player does not have this item in inventory
-                                playerHasAllItemsForQuest = false;
-
-                                //There is no need to keep checking other items
-                                break;
-                            }
-                        }
+                        
 
                         if(playerHasAllItemsForQuest)
                         {
@@ -195,20 +131,8 @@ namespace SuperAdventure
                                 newLocation.QuestAvailableHere.Name +
                                 " quest." + Environment.NewLine;
 
-                            //Remove quest items from player inventory 
-                            foreach(QuestCompletionItem qci in newLocation.QuestAvailableHere.QuestCompletionItems)
-                            {
-                                foreach(InventoryItem ii in _player.Inventory)
-                                {
-                                    if(ii.Details.ID == qci.Details.ID)
-                                    {
-                                        //subtract quantity from player's inventory that was needed to complete the quest
-
-                                        ii.Quantity -= qci.Quantity; ;
-                                        break;
-                                    }
-                                }
-                            }
+                            //Remove quest items from inventory
+                            _player.RemoveQuestCompletionItems(newLocation.QuestAvailableHere);
 
                             //give quest rewards
                             rtbMessages.Text += "You receive: " + Environment.NewLine;
@@ -224,41 +148,13 @@ namespace SuperAdventure
                             _player.Gold += newLocation.QuestAvailableHere.RewardGold;
 
                             //add reward item to player inventory
-                            bool addedItemToPlayerInventory = false;
+                            _player.AddItemToInventory(newLocation.QuestAvailableHere.RewardItem);
 
-                            foreach(InventoryItem ii in _player.Inventory)
-                            {
-                                if(ii.Details.ID == newLocation.QuestAvailableHere.RewardItem.ID)
-                                {
-                                    //they already have the item, so increase the quantity
-                                    ii.Quantity++;
 
-                                    addedItemToPlayerInventory = true;
-
-                                    break;
-
-                                }
-                            }
-
-                            //they don't have the item at all, so we need to add it
-                            if(!addedItemToPlayerInventory)
-                            {
-                                _player.Inventory.Add(new InventoryItem(newLocation.QuestAvailableHere.RewardItem, 1));
-                            }
 
                             //Mark the quest as completed 
-                            //Find the quest in player's quest list
-
-                            foreach (PlayerQuest pq in _player.Quests)
-                            {
-                                if (pq.Details.ID == newLocation.QuestAvailableHere.ID)
-                                {
-                                    //mark completed
-                                    pq.IsCompleted = true;
-
-                                    break;
-                                }
-                            }
+                            _player.MarkQuestCompleted(newLocation.QuestAvailableHere);
+                        
                         }
                     }
                 }
@@ -333,6 +229,24 @@ namespace SuperAdventure
 
             }
 
+            //Update Inventory 
+            UpdateInventoryListInUI();
+
+            //Update Quest 
+            UpdateQuestListInUI();
+
+            //Update Weapons
+            UpdateWeaponListInUI();
+
+            //Update Healing Potions
+            UpdateHealingPotionsListInUI();
+     
+        }
+
+
+        private void UpdateInventoryListInUI()
+        {
+
             //refresh player inventory list
             dgvInventory.RowHeadersVisible = false;
 
@@ -345,12 +259,15 @@ namespace SuperAdventure
 
             foreach (InventoryItem ii in _player.Inventory)
             {
-                if(ii.Quantity > 0)
+                if (ii.Quantity > 0)
                 {
                     dgvInventory.Rows.Add(new[] { ii.Details.Name, ii.Quantity.ToString() });
                 }
             }
-
+        }
+        
+        private void UpdateQuestListInUI()
+        {
             //Refresh player quest list
             dgvQuests.RowHeadersVisible = false;
 
@@ -361,26 +278,30 @@ namespace SuperAdventure
 
             dgvQuests.Rows.Clear();
 
-            foreach(PlayerQuest pq in _player.Quests)
+            foreach (PlayerQuest pq in _player.Quests)
             {
                 dgvQuests.Rows.Add(new[] { pq.Details.Name, pq.IsCompleted.ToString() });
             }
+        }
+
+        private void UpdateWeaponListInUI()
+        {
 
             //Refresh player weapon combobox
             List<Weapon> weapons = new List<Weapon>();
 
-            foreach(InventoryItem ii in _player.Inventory)
+            foreach (InventoryItem ii in _player.Inventory)
             {
-                if(ii.Details is Weapon)
+                if (ii.Details is Weapon)
                 {
-                    if(ii.Quantity > 0)
+                    if (ii.Quantity > 0)
                     {
                         weapons.Add((Weapon)ii.Details);
                     }
                 }
             }
 
-            if(weapons.Count == 0)
+            if (weapons.Count == 0)
             {
                 //the player has no weapons, so hide the weapon combobox and "Use" button
                 cboWeapons.Visible = false;
@@ -397,22 +318,26 @@ namespace SuperAdventure
                 cboWeapons.SelectedIndex = 0;
             }
 
+        }
+
+        private void UpdateHealingPotionsListInUI()
+        {
             //Refresh player healing potions combobox 
 
             List<HealingPotion> healingPotions = new List<HealingPotion>();
 
-            foreach(InventoryItem ii in _player.Inventory)
+            foreach (InventoryItem ii in _player.Inventory)
             {
-                if(ii.Details is HealingPotion)
+                if (ii.Details is HealingPotion)
                 {
-                    if(ii.Quantity > 0)
+                    if (ii.Quantity > 0)
                     {
                         healingPotions.Add((HealingPotion)ii.Details);
                     }
                 }
             }
 
-            if(healingPotions.Count == 0)
+            if (healingPotions.Count == 0)
             {
                 //the player has no healing potions so hide the UI elements
                 cboPotions.Visible = false;
@@ -426,8 +351,10 @@ namespace SuperAdventure
 
                 cboPotions.SelectedIndex = 0;
             }
-            
         }
+
+
+        
 
     }
 }
